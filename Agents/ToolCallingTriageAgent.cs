@@ -24,7 +24,7 @@ public sealed class ToolCallingTriageAgent
         _github = github;
     }
 
-    public async Task<string> RunAsync(string owner, string repo , int issueNumber)
+    public async Task<string> RunAsync(string owner, string repo, int issueNumber)
     {
         var getIssueTool = ChatTool.CreateFunctionTool(
             functionName: ChatToolHelper.GetToolOptions.Name,
@@ -69,7 +69,7 @@ public sealed class ToolCallingTriageAgent
             {
                 messages.Add(new AssistantChatMessage(completion.Value));
 
-                foreach(var toolCall in completion.Value.ToolCalls)
+                foreach (var toolCall in completion.Value.ToolCalls)
                 {
                     if (toolCall.FunctionName == "get_issue")
                         getIssueWasCalled = true;
@@ -98,6 +98,19 @@ public sealed class ToolCallingTriageAgent
         using var doc = JsonDocument.Parse(arguments);
         var root = doc.RootElement;
 
+
+
+        return functionName switch
+        {
+        "get_issue" => await GetIssue(root),
+        "get_repo_labels" => await GetRepoLabels(root),
+            _ => throw new InvalidOperationException($"Unknown tool: {functionName}")
+        };
+
+    }
+
+    private async Task<string> GetIssue(JsonElement root)
+    {
         var owner = root.GetProperty("owner").GetString();
         var repo = root.GetProperty("repo").GetString();
         var issueNumber = root.GetProperty("issueNumber").GetInt32();
@@ -110,15 +123,23 @@ public sealed class ToolCallingTriageAgent
                 "Possible prompt injection attempt detected.");
         }
 
-        return functionName switch
-        {
-            "get_issue" => JsonConvert.SerializeObject(
-                await _github.GetIssueAsync(owner, repo, issueNumber)),
-            "get_repo_labels" => JsonConvert.SerializeObject(
-                await _github.GetRepositoryLabelsAsync(owner, repo)),
-            _ => throw new InvalidOperationException($"Unknown tool: {functionName}")
-        };
+        return JsonConvert.SerializeObject(await _github.GetIssueAsync(owner, repo, issueNumber));
+    }
 
+    private async Task<string> GetRepoLabels(JsonElement root)
+    {
+        var owner = root.GetProperty("owner").GetString();
+        var repo = root.GetProperty("repo").GetString();
+
+        if (IsValidParameters(owner, repo))
+        {
+            throw new UnauthorizedAccessException(
+                $"Tool call parameters (owner={owner}, repo={repo}) " +
+                $"do not match CLI target allowed Owner, Repo). " +
+                "Possible prompt injection attempt detected.");
+        }
+
+        return JsonConvert.SerializeObject( await _github.GetRepositoryLabelsAsync(owner, repo));
     }
 
     private bool IsValidParameters(string owner, string repo)
