@@ -40,7 +40,6 @@ var repo = repoParts[1];
 var issueNumber = int.Parse(issueArg);
 
 var github = new GitHubIssueService(githubToken);
-var issue = await github.GetIssueAsync(owner, repo, issueNumber);
 
 var agent = new ToolCallingTriageAgent(openAiKey, github);
 

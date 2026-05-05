@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using OpenAI.Chat;
 using System;
 using System.Collections.Generic;
+using System.Dynamic;
 using System.Text;
 using System.Text.Json;
 
@@ -14,6 +15,8 @@ public sealed class ToolCallingTriageAgent
 {
     private readonly ChatClient _chatClient;
     private readonly GitHubIssueService _github;
+    private const int MaxIterations = 10;
+
 
     public ToolCallingTriageAgent(string openAiKey, GitHubIssueService github)
     {
@@ -46,9 +49,20 @@ public sealed class ToolCallingTriageAgent
             new UserChatMessage(PromptHelper.TriageChatMessagePrompt(owner, repo, issueNumber))
         ];
 
+        bool getIssueWasCalled = false;
+        int iterationCount = 0;
+
 
         while (true)
         {
+
+            if (++iterationCount > MaxIterations)
+            {
+                throw new InvalidOperationException(
+                    $"Triage agent exceeded maximum iterations ({MaxIterations}). " +
+                    "The model may be stuck in a tool-calling loop.");
+            }
+
             var completion = await _chatClient.CompleteChatAsync(messages, options);
 
             if (completion.Value.FinishReason == ChatFinishReason.ToolCalls)
@@ -57,6 +71,10 @@ public sealed class ToolCallingTriageAgent
 
                 foreach(var toolCall in completion.Value.ToolCalls)
                 {
+                    if (toolCall.FunctionName == "get_issue")
+                        getIssueWasCalled = true;
+
+
                     var json = await ExecuteToolAsync(toolCall.FunctionName, toolCall.FunctionArguments);
 
                     messages.Add(new ToolChatMessage(toolCall.Id, json));
@@ -64,6 +82,11 @@ public sealed class ToolCallingTriageAgent
 
                 continue;
             }
+
+            if (!getIssueWasCalled)
+                throw new InvalidOperationException(
+                    "Cannot complete triage: get_issue tool was never called. " +
+                    "Triage reports must be based on tool-provided data.");
 
             return completion.Value.Content[0].Text;
         }
@@ -75,24 +98,34 @@ public sealed class ToolCallingTriageAgent
         using var doc = JsonDocument.Parse(arguments);
         var root = doc.RootElement;
 
+        var owner = root.GetProperty("owner").GetString();
+        var repo = root.GetProperty("repo").GetString();
+        var issueNumber = root.GetProperty("issueNumber").GetInt32();
+
+        if (IsValidParameters(owner, repo))
+        {
+            throw new UnauthorizedAccessException(
+                $"Tool call parameters (owner={owner}, repo={repo}, issue={issueNumber}) " +
+                $"do not match CLI target allowed Owner, Repo and/or IssueNumber). " +
+                "Possible prompt injection attempt detected.");
+        }
+
         return functionName switch
         {
             "get_issue" => JsonConvert.SerializeObject(
-                await _github.GetIssueAsync(
-                    root.GetProperty("owner").GetString()!,
-                    root.GetProperty("repo").GetString()!,
-                    root.GetProperty("issueNumber").GetInt32()!
-                 )
-                ),
+                await _github.GetIssueAsync(owner, repo, issueNumber)),
             "get_repo_labels" => JsonConvert.SerializeObject(
-                await _github.GetRepositoryLabelsAsync(
-                    root.GetProperty("owner").GetString()!,
-                    root.GetProperty("repo").GetString()!
-                 )
-                ),
-
+                await _github.GetRepositoryLabelsAsync(owner, repo)),
             _ => throw new InvalidOperationException($"Unknown tool: {functionName}")
         };
 
+    }
+
+    private bool IsValidParameters(string owner, string repo)
+    {
+        string[] validOwners = { "kryptonian001" };
+        string[] validRepos = { "GitHubIssueTriageAgen" };
+
+        return validOwners.Contains(owner) && validRepos.Contains(repo);
     }
 }
