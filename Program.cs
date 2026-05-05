@@ -16,7 +16,7 @@ var openAiKey = config["OpenAI:ApiKey"]
     ?? throw new InvalidOperationException("Missing OpenAI API key.");
 
 var repoArg = args.FirstOrDefault(x => x.StartsWith("--repo="))?
-    .Replace("--repo=", "");
+              .Replace("--repo=", "");
 
 var issueArg = args.FirstOrDefault(x => x.StartsWith("--issue="))?
     .Replace("--issue=", "");
@@ -40,39 +40,12 @@ var repo = repoParts[1];
 var issueNumber = int.Parse(issueArg);
 
 var github = new GitHubIssueService(githubToken);
-var agent = new IssueTriageAgent(openAiKey);
+var issue = await github.GetIssueAsync(owner, repo, issueNumber);
 
-var issue = await github.GetInssueAsync(owner, repo, issueNumber);
-var report = await agent.TriageAsync(issue);
+var agent = new ToolCallingTriageAgent(openAiKey, github);
 
-Console.WriteLine($$"""
-    # GitHub Issue Triage Report
 
-    ## Classification
-    {report.Classification}
+var report = await agent.RunAsync(owner, repo, issueNumber);
 
-    ## Summary
-    {report.Summary}
-
-    ## Severity
-    {report.Severity}
-
-    ## Suggested Labels
-    {string.Join(", ", report.SuggestedLabels)}
-
-    ## Reproduction Steps
-    {string.Join(Environment.NewLine, report.ReproductionSteps.Select((x, i) => $"{i + 1}. {x}"))}
-
-    ## Missing Information
-    {string.Join(Environment.NewLine, report.MissingInformation.Select(x => $"- {x}"))}
-
-    ## Developer-Ready Task
-    {report.DeveloperReadyTask}
-
-    ## Suggested Response Comment
-    {report.SuggestedResponseComment}
-
-    ## Confidence
-    {report.Confidence}
-    """);
+Console.WriteLine(report);
 

@@ -17,7 +17,7 @@ public sealed class GitHubIssueService
         };       
     }
 
-    public async Task<GitHubIssueContext> GetInssueAsync(string owner, string repo, int issueNumber)
+    public async Task<GitHubIssueContext> GetIssueAsync(string owner, string repo, int issueNumber)
     {
         var issue = await _client.Issue.Get(owner, repo, issueNumber);
 
@@ -31,10 +31,21 @@ public sealed class GitHubIssueService
             RepositoryOwner = owner,
             RepositoryName = repo,
             IssueNumber = issueNumber,
+            Title = issue.Title,
             Body = issue.Body,
             Author = issue.User.Login,
             ExistingLabels = issue.Labels.Select(x => x.Name).ToList(),
             Comments = comments.Select(x => x.Body ?? "").ToList()
         };
+    }
+
+    public async Task<string[]> GetRepositoryLabelsAsync(string owner, string repo)
+    {
+        var labels = await _client.Issue.Labels.GetAllForRepository(owner, repo);
+
+        return labels
+            .Select(x => x.Name)
+            .OrderBy(x => x)
+            .ToArray();
     }
 }
