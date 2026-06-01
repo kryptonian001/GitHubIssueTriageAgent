@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "GitHubIssueTriageAgent": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
