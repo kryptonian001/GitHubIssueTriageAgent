@@ -1,6 +1,9 @@
 ﻿using Azure.Messaging.ServiceBus;
+using GitHubIssueTriageAgent.Agents;
+using GithubIssueTriageShared.Models.Github;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -10,13 +13,15 @@ namespace GitHubIssueTriageAgent.Services;
 public sealed class GitHubIssueProcessorWorker : BackgroundService
 {
     private readonly ServiceBusClient _client;
+    private readonly ToolCallingTriageAgent _agent;
     private readonly IConfiguration _config;
 
     private ServiceBusProcessor? _processor;
 
-    public GitHubIssueProcessorWorker(ServiceBusClient client, IConfiguration config)
+    public GitHubIssueProcessorWorker(ServiceBusClient client, ToolCallingTriageAgent agent, IConfiguration config)
     {
         _client = client;
+        _agent = agent;
         _config = config;
     }
 
@@ -46,7 +51,22 @@ public sealed class GitHubIssueProcessorWorker : BackgroundService
 
     private async Task ProcessMessageAsync(ProcessMessageEventArgs args)
     {
-        Console.WriteLine($"Message recieved: {args.Message.Body}");        
+        Console.WriteLine($"Message recieved: {args.Message.Body}");
+
+        var githubIssue = JsonConvert.DeserializeObject<GithubIssue>(args.Message.Body.ToString());
+
+        if (githubIssue == null)
+        {
+            Console.WriteLine("GitHub issue was not found");
+            return;
+        }
+
+        var repo = githubIssue.repository;
+        var issue = githubIssue.issue;
+
+        var report = await _agent.RunAsync(repo.owner.login, repo.name, issue.number);
+
+        Console.WriteLine($"Triage report: {report}");
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)
