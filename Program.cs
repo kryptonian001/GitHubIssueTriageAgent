@@ -1,6 +1,5 @@
 ﻿using Azure.Messaging.ServiceBus;
 using GitHubIssueTriageAgent.Agents;
-using GitHubIssueTriageAgent.Configuration;
 using GitHubIssueTriageAgent.Helpers;
 using GitHubIssueTriageAgent.Services;
 using Microsoft.Extensions.Configuration;

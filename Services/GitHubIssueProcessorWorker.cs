@@ -66,6 +66,8 @@ public sealed class GitHubIssueProcessorWorker : BackgroundService
 
         var report = await _agent.RunAsync(repo.owner.login, repo.name, issue.number);
 
+        await args.CompleteMessageAsync(args.Message);
+
         Console.WriteLine($"Triage report: {report}");
     }
 

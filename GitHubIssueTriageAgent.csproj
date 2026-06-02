@@ -24,8 +24,6 @@
 
   <ItemGroup>
     <Folder Include="Helpers\Models\" />
-    <Folder Include="Prompts\" />
-    <Folder Include="Tools\" />
   </ItemGroup>
 
   <ItemGroup>
